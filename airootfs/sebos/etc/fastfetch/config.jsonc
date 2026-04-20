@@ -1,0 +1,22 @@
+{
+  "logo": {
+    "type": "file",
+    "source": "/usr/share/pixmaps/logo.txt"
+  },
+
+  "modules": [
+	"break",
+	"title",
+	"break",
+	"os",
+	"kernel",
+	"uptime",
+	"packages",
+	"shell",
+	"break",
+	"cpu",
+	"gpu",
+	"memory",
+	"disk"
+	]
+}

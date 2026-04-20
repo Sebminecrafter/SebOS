@@ -1,0 +1,6 @@
+Welcome to [35 SebOS [0m !
+
+Connect to the internet using [41m nmtui [0m .
+Ethernet, WLAN and WWAN interfaces using DHCP should work automatically.
+
+You may start the install by typing [35 installer [0m .

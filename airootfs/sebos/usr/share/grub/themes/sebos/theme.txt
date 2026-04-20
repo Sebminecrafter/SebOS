@@ -1,0 +1,36 @@
+# ===== SebOS Hacker Theme =====
+
+# ---------- BACKGROUND ----------
+desktop-image: "background.png"
+
+# ---------- FONTS ----------
+title-font: "DejaVu Sans Bold 26"
+item-font: "DejaVu Sans 16"
+selected-item-font: "DejaVu Sans Bold 16"
+
+# ---------- COLORS ----------
+title-color: "#00ff88"
+item-color: "#66ffcc"
+selected-item-color: "#00ff00"
+
+# ---------- BOOT MENU ----------
++ boot_menu {
+    left = 25%
+    top = 45%
+    width = 50%
+    height = 30%
+
+    item_color = "#66ffcc"
+    selected_item_color = "#00ff00"
+    item_height = 32
+}
+
+# ---------- TITLE ----------
++ label {
+    top = 15%
+    left = 0
+    width = 100%
+    align = "center"
+    text = "SebOS // secure boot interface"
+    color = "#00ff88"
+}
