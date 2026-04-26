@@ -5,7 +5,7 @@ import subprocess
 import getpass
 import os
 import sys
-import shutil
+from passlib.hash import sha512_crypt
 
 MNT = "/mnt"
 SEBOS = "/sebos"
@@ -33,6 +33,12 @@ def choose_install_type():
         else:
             print("Invalid choice.")
 
+def choose_extra_packages():
+    choice = input("Choose extra packages, seperated by spaces: ").strip()
+    packages = choice.split(" ")
+    return packages
+
+
 def get_user_info():
     username = input("Enter username: ").strip()
 
@@ -45,15 +51,190 @@ def get_user_info():
 
     return username, password
 
-def generate_config(profile, username, password):
+def choose_disk():
+    print("Available disks:")
+    result = subprocess.run(["lsblk", "-d", "-o", "NAME,SIZE"], capture_output=True, text=True)
+    print(result.stdout)
+
+    disk = input("Enter disk to use (e.g. sda, nvme0n1): ").strip()
+    full_disk = f"/dev/{disk}"
+
+    confirm = input(f"WARNING: This will erase ALL data on {full_disk}. Continue? (y/n): ").strip().lower()
+    if not confirm.lower() in ["y", "yes", "yeah", "ye"]:
+        print("Aborted.")
+        sys.exit(1)
+
+    return full_disk
+
+def generate_config(profile, username, password, extra, disk, silent):
+    gfx = greeter = details = None
+    profiletype = "Minimal"
+
+    passwordhash = sha512_crypt.hash(password)
+
+    # Base packages
+    packages = [
+        "neovim",
+        "fastfetch",
+        "nano"
+    ]
+    packages.extend(extra)
+
+    if profile == "xfce4":
+        gfx = "All open-source"
+        greeter = "lightdm-gtk-greeter"
+        profiletype = "Desktop"
+        details = ["Xfce4"]
+
     config = {
-        "profile": profile,
-        "bootloader": "grub",
-        "packages": ["neovim", "fastfetch"],
+        "app_config": {
+            "audio_config": {
+                "audio": "pipewire"
+            },
+            "bluetooth_config": {
+                "enabled": True
+            },
+            "firewall_config": {
+                "firewall": "ufw"
+            },
+            "fonts_config": {
+                "fonts": [
+                    "noto-fonts",
+                    "noto-fonts-emoji",
+                    "noto-fonts-cjk",
+                    "ttf-liberation",
+                    "ttf-dejavu"
+                ]
+            },
+            "print_service_config": {
+                "enabled": True
+            }
+        },
+        "archinstall-language": "English",
+        "auth_config": {},
+        "bootloader_config": {
+            "bootloader": "Grub",
+            "removable": True,
+            "uki": False
+        },
+        "custom_commands": [],
+        "disk_config": {
+            "btrfs_options": {
+                "snapshot_config": None
+            },
+            "config_type": "default_layout",
+            "device_modifications": [
+                {
+                    "device": disk,
+                    "partitions": [
+                        {
+                            "btrfs": [],
+                            "dev_path": None,
+                            "flags": ["boot"],
+                            "fs_type": "fat32",
+                            "mount_options": [],
+                            "mountpoint": "/boot",
+                            "obj_id": bootobjid,
+                            "size": {
+                                "sector_size": {
+                                    "unit": "B",
+                                    "value": 512
+                                },
+                                "unit": "GiB",
+                                "value": 1
+                            },
+                            "start": {
+                                "sector_size": {
+                                    "unit": "B",
+                                    "value": 512
+                                },
+                                "unit": "MiB",
+                                "value": 1
+                            },
+                            "status": "create",
+                            "type": "primary"
+                        },
+                        {
+                            "btrfs": [],
+                            "dev_path": None,
+                            "flags": []
+                            "fs_type": "ext4",
+                            "mount_options": [],
+                            "mountpoint": "/",
+                            "obj_id": mainobjid,
+                            "size": {
+                                "sector_size": {
+                                    "unit": "B",
+                                    "value": 512
+                                },
+                                "unit": "B",
+                                "value": disksizebytes
+                            },
+                            "start": {
+                                "sector_size": {
+                                    "unit": "B",
+                                    "value": 512
+                                },
+                                "unit": "B",
+                                "value": startbytes
+                            },
+                            "status": "create",
+                            "type": "primary"
+                        }
+                    ],
+                    "wipe": True
+                }
+            ]
+        },
+        "hostname": "sebos",
+        "kernels": ["linux"],
+        "locale_config": {
+            "kb_layout": "us",
+            "sys_enc": "UTF-8",
+            "sys_lang": "en_US.UTF-8"
+        },
+        "mirror_config": {
+            "custom_repoisitories": [],
+            "custom_servers": [],
+            "mirror_regions": {},
+            "optional_repositories": []
+        },
+        "network_config": {
+            "type": "nm"
+        },
+        "ntp": True,
+        "packages": packages,
+        "pacman_config": {
+            "color": True,
+            "parallel_downloads": 5
+        },
+        "profile_config":  {
+            "gfx_driver": gfx,
+            "greeter": greeter,
+            "profile": {
+                "custom_settings": {},
+                "details": details,
+                "main": profiletype
+            }
+        },
+        "script": None,
+        "services": [],
+        "swap": {
+            "algorithm": "zstd",
+            "enabled": True
+        },
+        "silent": silent,
+        "swap": True,
+        "timezone": "UTC",
+        "version": "4.3"
+    }
+
+    creds = {
+        "root_enc_password": "root",
         "users": [
             {
                 "username": username,
-                "password": password,
+                "enc_password": passwordhash,
                 "sudo": True
             }
         ]
@@ -62,23 +243,16 @@ def generate_config(profile, username, password):
     with open("config.json", "w") as f:
         json.dump(config, f, indent=2)
 
+    with open("creds.json", "w") as f:
+        json.dump(creds, f, indent=2)
+
 def run_archinstall():
-    run(["archinstall", "--config", "config.json"])
+    run(["archinstall", "--config", "config.json", "--creds", "creds.json"])
 
 def apply_sebos(variant: str):
-    """
-    System-wide overlay model:
-
-    /sebos/common     -> base system overrides
-    /sebos/<variant>  -> profile-specific overrides
-
-    No user-specific configuration is applied here.
-    """
-
     common = f"{SEBOS}/common/"
     variant_path = f"{SEBOS}/{variant}/"
 
-    # 1. Base system overlay (always applied)
     run([
         "rsync",
         "-a",
@@ -86,7 +260,6 @@ def apply_sebos(variant: str):
         MNT + "/"
     ])
 
-    # 2. Profile-specific overlay (XFCE / minimal etc.)
     if os.path.exists(variant_path):
         run([
             "rsync",
@@ -102,15 +275,21 @@ def main():
 
     install = choose_install_type()
     username, password = get_user_info()
+    extrapkgs = choose_extra_packages()
+    disk = choose_disk()
 
-    generate_config(install["profile"], username, password)
+    auto = False
+    proceed = input("Proceed with automatic installation? (y/n): ").strip().lower()
+    if not proceed.lower() in ["y", "yes", "yeah", "ye"]:
+        auto = True
+
+    generate_config(install["profile"], username, password, extrapkgs, disk, auto)
 
     run_archinstall()
 
-    # Apply your custom OS layer
-    apply_sebos(install["variant"], username)
+    apply_sebos(install["variant"])
 
-    print("Install + customization complete.")
+    print("Install complete.")
 
 if __name__ == "__main__":
     main()

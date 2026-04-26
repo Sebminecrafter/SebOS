@@ -31,7 +31,9 @@ parted
 pkgconf
 python3
 python-pip
+python-passlib
 reflector
+rsync
 squashfs-tools
 sudo
 syslinux
