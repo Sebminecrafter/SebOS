@@ -78,13 +78,41 @@ def generate_config(profile, username, password, extra, disk, silent):
         "fastfetch",
         "nano"
     ]
+    
     packages.extend(extra)
 
+    # Profile-specific
     if profile == "xfce4":
         gfx = "All open-source"
         greeter = "lightdm-gtk-greeter"
         profiletype = "Desktop"
         details = ["Xfce4"]
+       
+    # Disk config
+    
+    # Get disk size in bytes
+    size_bytes = int(subprocess.check_output(
+        ["blockdev", "--getsize64", disk]
+    ).decode().strip())
+
+    # Partition layout assumptions
+    boot_size_gib = 1
+    boot_size_bytes = boot_size_gib * 1024**3
+
+    # Start offsets
+    boot_start_mib = 1
+    boot_start_bytes = boot_start_mib * 1024**2
+
+    root_start_bytes = boot_start_bytes + boot_size_bytes
+    root_size_bytes = size_bytes - root_start_bytes
+
+    # Object IDs (just need to be unique integers)
+    bootobjid = 1
+    mainobjid = 2
+
+    # Map to names expected in config
+    disksizebytes = root_size_bytes
+    startbytes = root_start_bytes
 
     config = {
         "app_config": {
@@ -157,7 +185,7 @@ def generate_config(profile, username, password, extra, disk, silent):
                         {
                             "btrfs": [],
                             "dev_path": None,
-                            "flags": []
+                            "flags": [],
                             "fs_type": "ext4",
                             "mount_options": [],
                             "mountpoint": "/",
@@ -224,7 +252,6 @@ def generate_config(profile, username, password, extra, disk, silent):
             "enabled": True
         },
         "silent": silent,
-        "swap": True,
         "timezone": "UTC",
         "version": "4.3"
     }
