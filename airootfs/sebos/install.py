@@ -66,7 +66,7 @@ def choose_disk():
 
     return full_disk
 
-def generate_config(profile, username, password, extra, disk, silent):
+def generate_config(profile, username, password, extra, disk):
     gfx = greeter = details = None
     profiletype = "Minimal"
 
@@ -251,7 +251,6 @@ def generate_config(profile, username, password, extra, disk, silent):
             "algorithm": "zstd",
             "enabled": True
         },
-        "silent": silent,
         "timezone": "UTC",
         "version": "4.3"
     }
@@ -273,8 +272,15 @@ def generate_config(profile, username, password, extra, disk, silent):
     with open("creds.json", "w") as f:
         json.dump(creds, f, indent=2)
 
-def run_archinstall():
-    run(["archinstall", "--config", "config.json", "--creds", "creds.json"])
+def run_archinstall(silent):
+    ai_args = ["archinstall", "--config", "config.json", "--creds", "creds.json"]
+
+    if silent:
+        ai_args.append("--silent")
+
+    run(["pacman-key", "--init"])
+    run(["pacman-key", "--populate"])
+    run(ai_args)
 
 def apply_sebos(variant: str):
     common = f"{SEBOS}/common/"
@@ -297,7 +303,7 @@ def apply_sebos(variant: str):
 
 def main():
     if os.geteuid() != 0:
-        print("Run as root.")
+        print("Please run this program as root. (Have you tried using sudo?)")
         sys.exit(1)
 
     install = choose_install_type()
@@ -307,12 +313,12 @@ def main():
 
     auto = False
     proceed = input("Proceed with automatic installation? (y/n): ").strip().lower()
-    if not proceed.lower() in ["y", "yes", "yeah", "ye"]:
+    if proceed.lower() in ["y", "yes", "yeah", "ye"]:
         auto = True
 
-    generate_config(install["profile"], username, password, extrapkgs, disk, auto)
+    generate_config(install["profile"], username, password, extrapkgs, disk)
 
-    run_archinstall()
+    run_archinstall(auto)
 
     apply_sebos(install["variant"])
 
