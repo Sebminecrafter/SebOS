@@ -177,10 +177,18 @@ def generate_config(profile, username, password, root_password, extra, disk):
                             "mountpoint": "/boot/efi",
                             "obj_id": bootobjid,
                             "size": {
+                                "sector_size": {
+                                    "unit": "B",
+                                    "value": 512
+                                },
                                 "unit": "MiB",
                                 "value": boot_size_mib
                             },
                             "start": {
+                               "sector_size": {
+                                    "unit": "B",
+                                    "value": 512
+                                },
                                 "unit": "MiB",
                                 "value": boot_start_mib
                             },
@@ -196,10 +204,18 @@ def generate_config(profile, username, password, root_password, extra, disk):
                             "mountpoint": "/",
                             "obj_id": mainobjid,
                             "size": {
+                                "sector_size": {
+                                    "unit": "B",
+                                    "value": 512
+                                },
                                 "unit": "MiB",
                                 "value": root_size_mib
                             },
                             "start": {
+                                "sector_size": {
+                                    "unit": "B",
+                                    "value": 512
+                                },
                                 "unit": "MiB",
                                 "value": root_start_mib
                             },
