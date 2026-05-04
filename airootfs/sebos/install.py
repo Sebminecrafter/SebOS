@@ -13,6 +13,10 @@ SEBOS = "/sebos"
 def run(cmd):
     subprocess.run(cmd, check=True)
 
+def confirm(message):
+    confirminput = input(message).strip().lower()
+    return confirminput in ["y", "yes", "yeah", "ye"]
+
 def choose_install_type():
     print("Select install type:")
     print("1) Terminal Only (TTY)")
@@ -35,7 +39,7 @@ def choose_install_type():
 
 def choose_extra_packages():
     choice = input("Choose extra packages, seperated by spaces: ").strip()
-    packages = choice.split(" ")
+    packages = [p for p in choice.split() if p]
     return packages
 
 
@@ -51,26 +55,40 @@ def get_user_info():
 
     return username, password
 
+def get_root_password():
+    print("The root account is an administrator, which is used for high privelege tasks or in emergencies.")
+    print("This password should be secure and not given to anyone. Don't forget it!")
+    while True:
+        password = getpass.getpass(prompt="Enter root password: ", echo_char='*')
+        confirm = getpass.getpass(prompt="Confirm root password: ", echo_char='*')
+        if password == confirm:
+            return password
+        print("Passwords do not match.")
+
 def choose_disk():
     print("Available disks:")
     result = subprocess.run(["lsblk", "-d", "-o", "NAME,SIZE"], capture_output=True, text=True)
     print(result.stdout)
 
-    disk = input("Enter disk to use (e.g. sda, nvme0n1): ").strip()
+    disk = input("Enter disk to use (will look like sda, nvme, etc.): ").strip()
     full_disk = f"/dev/{disk}"
 
-    confirm = input(f"WARNING: This will erase ALL data on {full_disk}. Continue? (y/n): ").strip().lower()
-    if not confirm.lower() in ["y", "yes", "yeah", "ye"]:
-        print("Aborted.")
+    if not os.path.exists(full_disk):
+        print("Invalid disk.")
         sys.exit(1)
 
+    if not confirm(f"WARNING: This will erase ALL data on {full_disk}. Continue? (y/n): "):
+        print("Aborted.")
+        sys.exit(1)
+    
     return full_disk
 
-def generate_config(profile, username, password, extra, disk):
+def generate_config(profile, username, password, root_password, extra, disk):
     gfx = greeter = details = None
     profiletype = "Minimal"
 
     passwordhash = sha512_crypt.hash(password)
+    rootpasswordhash = sha512_crypt.hash(root_password)
 
     # Base packages
     packages = [
@@ -90,29 +108,24 @@ def generate_config(profile, username, password, extra, disk):
        
     # Disk config
     
-    # Get disk size in bytes
-    size_bytes = int(subprocess.check_output(
+    # Get disk size in MiB (aligned)
+    size_mib = int(subprocess.check_output(
         ["blockdev", "--getsize64", disk]
-    ).decode().strip())
+    ).decode().strip()) // (1024 * 1024)
+    
+    if size_mib < 2048:
+        print("Disk too small.")
+        sys.exit(1)
 
-    # Partition layout assumptions
-    boot_size_gib = 1
-    boot_size_bytes = boot_size_gib * 1024**3
-
-    # Start offsets
+    boot_size_mib = 1024  # 1 GiB
     boot_start_mib = 1
-    boot_start_bytes = boot_start_mib * 1024**2
 
-    root_start_bytes = boot_start_bytes + boot_size_bytes
-    root_size_bytes = size_bytes - root_start_bytes
+    root_start_mib = boot_start_mib + boot_size_mib
+    root_size_mib = max(1024, size_mib - root_start_mib - 8)
 
     # Object IDs (just need to be unique integers)
     bootobjid = 1
     mainobjid = 2
-
-    # Map to names expected in config
-    disksizebytes = root_size_bytes
-    startbytes = root_start_bytes
 
     config = {
         "app_config": {
@@ -158,26 +171,18 @@ def generate_config(profile, username, password, extra, disk):
                         {
                             "btrfs": [],
                             "dev_path": None,
-                            "flags": ["boot"],
+                            "flags": ["boot", "esp"],
                             "fs_type": "fat32",
                             "mount_options": [],
-                            "mountpoint": "/boot",
+                            "mountpoint": "/boot/efi",
                             "obj_id": bootobjid,
                             "size": {
-                                "sector_size": {
-                                    "unit": "B",
-                                    "value": 512
-                                },
-                                "unit": "GiB",
-                                "value": 1
+                                "unit": "MiB",
+                                "value": boot_size_mib
                             },
                             "start": {
-                                "sector_size": {
-                                    "unit": "B",
-                                    "value": 512
-                                },
                                 "unit": "MiB",
-                                "value": 1
+                                "value": boot_start_mib
                             },
                             "status": "create",
                             "type": "primary"
@@ -191,20 +196,12 @@ def generate_config(profile, username, password, extra, disk):
                             "mountpoint": "/",
                             "obj_id": mainobjid,
                             "size": {
-                                "sector_size": {
-                                    "unit": "B",
-                                    "value": 512
-                                },
-                                "unit": "B",
-                                "value": disksizebytes
+                                "unit": "MiB",
+                                "value": root_size_mib
                             },
                             "start": {
-                                "sector_size": {
-                                    "unit": "B",
-                                    "value": 512
-                                },
-                                "unit": "B",
-                                "value": startbytes
+                                "unit": "MiB",
+                                "value": root_start_mib
                             },
                             "status": "create",
                             "type": "primary"
@@ -256,7 +253,7 @@ def generate_config(profile, username, password, extra, disk):
     }
 
     creds = {
-        "root_enc_password": "root",
+        "root_enc_password": rootpasswordhash,
         "users": [
             {
                 "username": username,
@@ -308,15 +305,13 @@ def main():
 
     install = choose_install_type()
     username, password = get_user_info()
+    root_password = get_root_password()
     extrapkgs = choose_extra_packages()
     disk = choose_disk()
 
-    auto = False
-    proceed = input("Proceed with automatic installation? (y/n): ").strip().lower()
-    if proceed.lower() in ["y", "yes", "yeah", "ye"]:
-        auto = True
+    auto = confirm("Proceed with automatic installation? (y/n): ")
 
-    generate_config(install["profile"], username, password, extrapkgs, disk)
+    generate_config(install["profile"], username, password, root_password, extrapkgs, disk)
 
     run_archinstall(auto)
 
