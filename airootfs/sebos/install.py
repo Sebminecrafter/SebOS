@@ -25,8 +25,6 @@ def interactive_menu(options: list, prompt: str = "Select:"):
     if not options:
         raise ValueError("Options list cannot be empty")
 
-    print()
-
     selected = 0
 
     def render():
@@ -58,8 +56,7 @@ def interactive_menu(options: list, prompt: str = "Select:"):
                     selected = (selected - 1) % len(options)
 
             elif ch in ("\r", "\n"):
-                sys.stdout.write("\n")
-                print()
+                sys.stdout.write("\r\n")
                 return selected
 
             elif ch == "l":
