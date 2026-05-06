@@ -5,43 +5,106 @@ import subprocess
 import getpass
 import os
 import sys
+import termios
+import tty
 from passlib.hash import sha512_crypt
 
 MNT = "/mnt"
 SEBOS = "/sebos"
 
-def run(cmd):
+def run(cmd: str):
     subprocess.run(cmd, check=True)
 
-def confirm(message):
-    confirminput = input(message).strip().lower()
-    return confirminput in ["y", "yes", "yeah", "ye"]
+def interactive_menu(options: list, prompt: str = "Select:"):
+    if not options:
+        raise ValueError("Options list cannot be empty")
+
+    selected = 0
+
+    def render():
+        sys.stdout.write("\r")  # return to start of line
+        line = prompt + " "
+        for i, opt in enumerate(options):
+            if i == selected:
+                line += f"\x1b[7m[{opt}]\x1b[0m "
+            else:
+                line += f"{opt} "
+        sys.stdout.write(line)
+        sys.stdout.write("\x1b[K")  # clear to end of line
+        sys.stdout.flush()
+
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+
+    try:
+        tty.setraw(fd)
+        render()
+        while True:
+            ch = sys.stdin.read(1)
+
+            if ch == "\x1b":
+                ch += sys.stdin.read(2)
+                if ch == "\x1b[C":  # right
+                    selected = (selected + 1) % len(options)
+                elif ch == "\x1b[D":  # left
+                    selected = (selected - 1) % len(options)
+
+            elif ch in ("\r", "\n"):
+                sys.stdout.write("\n")
+                return selected
+
+            elif ch == "l":
+                selected = (selected + 1) % len(options)
+            elif ch == "h":
+                selected = (selected - 1) % len(options)
+
+            render()
+
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+
+def confirm(message: str):
+    return interactive_menu(["Yes", "No"]) == 0
 
 def choose_install_type():
-    print("Select install type:")
-    print("1) Terminal Only (TTY)")
-    print("2) Xfce4")
-
-    while True:
-        choice = input("Enter choice (1-2): ").strip()
-        if choice == "1":
-            return {
-                "profile": "minimal",
-                "variant": "minimal"
-            }
-        elif choice == "2":
-            return {
-                "profile": "xfce4",
-                "variant": "xfce"
-            }
-        else:
-            print("Invalid choice.")
+    choice = interactive_menu(
+        ["Xfce4", "Terminal Only (TTY)"],
+        "Select install type:"
+    )
+    if choice == 0:
+        return {
+            "profile": "xfce4",
+            "variant": "xfce"
+        }
+    else:
+        return {
+            "profile": "minimal",
+            "variant": "minimal"
+        }
 
 def choose_extra_packages():
-    choice = input("Choose extra packages, seperated by spaces: ").strip()
+    choice = input("Choose extra packages, seperated by spaces (Enter/Return to skip): ").strip()
     packages = [p for p in choice.split() if p]
     return packages
 
+def install_sound_theme():
+    theme_repo = "https://github.com/cadecomposer/modern-minimal-ui-sounds.git"
+    theme_name = "modern-minimal-ui-sounds"
+    target_path = f"{MNT}/usr/share/sounds/{theme_name}"
+
+    # Clone to temp
+    run(["git", "clone", "--depth", "1", theme_repo, "/tmp/modern-minimal-ui-sounds"])
+
+    # Copy into target system
+    run(["mkdir", "-p", f"{MNT}/usr/share/sounds"])
+    run(["cp", "-r", "/tmp/modern-minimal-ui-sounds", target_path])
+
+    # Install required packages inside target system
+    run([
+        "arch-chroot", MNT,
+        "pacman", "-S", "--noconfirm",
+        "libcanberra", "libcanberra-pulse", "libcanberra-gtk3"
+    ])
 
 def get_user_info():
     username = input("Enter username: ").strip()
@@ -66,24 +129,40 @@ def get_root_password():
         print("Passwords do not match.")
 
 def choose_disk():
-    print("Available disks:")
-    result = subprocess.run(["lsblk", "-d", "-o", "NAME,SIZE"], capture_output=True, text=True)
-    print(result.stdout)
+    # Get disks in a parseable format (no headers, key=value)
+    result = subprocess.run(
+        ["lsblk", "-d", "-n", "-P", "-o", "NAME,SIZE"],
+        capture_output=True,
+        text=True,
+        check=True
+    )
 
-    disk = input("Enter disk to use (will look like sda, nvme, etc.): ").strip()
-    full_disk = f"/dev/{disk}"
+    disks = []
+    labels = []
 
-    if not os.path.exists(full_disk):
-        print("Invalid disk.")
+    for line in result.stdout.strip().splitlines():
+        parts = dict(p.split("=", 1) for p in line.split())
+        name = parts["NAME"].strip('"')
+        size = parts["SIZE"].strip('"')
+
+        path = f"/dev/{name}"
+        disks.append(path)
+        labels.append(f"{name} ({size})")
+
+    if not disks:
+        print("No disks found. (Something is definitely wrong here)")
         sys.exit(1)
 
-    if not confirm(f"WARNING: This will erase ALL data on {full_disk}. Continue? (y/n): "):
+    idx = interactive_menu(labels, "Select disk (←/→, Enter):")
+    full_disk = disks[idx]
+
+    if not confirm(f"WARNING: This will erase ALL data on {full_disk}. Continue? "):
         print("Aborted.")
         sys.exit(1)
     
     return full_disk
 
-def generate_config(profile, username, password, root_password, extra, disk):
+def generate_config(profile: str, username: str, password: str, root_password: str, extra: list, disk: str):
     gfx = greeter = details = None
     profiletype = "Minimal"
 
@@ -285,7 +364,7 @@ def generate_config(profile, username, password, root_password, extra, disk):
     with open("creds.json", "w") as f:
         json.dump(creds, f, indent=2)
 
-def run_archinstall(silent):
+def run_archinstall(silent: bool):
     ai_args = ["archinstall", "--config", "config.json", "--creds", "creds.json"]
 
     if silent:
@@ -314,6 +393,9 @@ def apply_sebos(variant: str):
             MNT + "/"
         ])
 
+    if variant == "xfce":
+        install_sound_theme()
+
 def main():
     if os.geteuid() != 0:
         print("Please run this program as root. (Have you tried using sudo?)")
@@ -325,7 +407,7 @@ def main():
     extrapkgs = choose_extra_packages()
     disk = choose_disk()
 
-    auto = confirm("Proceed with automatic installation? (y/n): ")
+    auto = confirm("Proceed with automatic installation? ")
 
     generate_config(install["profile"], username, password, root_password, extrapkgs, disk)
 
