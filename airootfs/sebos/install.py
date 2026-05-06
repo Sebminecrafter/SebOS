@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import json
+import re
 import subprocess
 import getpass
 import os
@@ -12,12 +13,19 @@ from passlib.hash import sha512_crypt
 MNT = "/mnt"
 SEBOS = "/sebos"
 
-def run(cmd: str):
+def run(cmd):
     subprocess.run(cmd, check=True)
+
+def run_chroot(cmd):
+    if isinstance(cmd, str):
+        cmd = [cmd]
+    subprocess.run(["arch-chroot", MNT, *cmd], check=True)
 
 def interactive_menu(options: list, prompt: str = "Select:"):
     if not options:
         raise ValueError("Options list cannot be empty")
+
+    print()
 
     selected = 0
 
@@ -51,6 +59,7 @@ def interactive_menu(options: list, prompt: str = "Select:"):
 
             elif ch in ("\r", "\n"):
                 sys.stdout.write("\n")
+                print()
                 return selected
 
             elif ch == "l":
@@ -64,7 +73,7 @@ def interactive_menu(options: list, prompt: str = "Select:"):
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
 def confirm(message: str):
-    return interactive_menu(["Yes", "No"]) == 0
+    return interactive_menu(["Yes", "No"], message) == 0
 
 def choose_install_type():
     choice = interactive_menu(
@@ -82,10 +91,20 @@ def choose_install_type():
             "variant": "minimal"
         }
 
+PACKAGE_NAME_RE = re.compile(r"^[a-z0-9@._+-]+$")
+
 def choose_extra_packages():
-    choice = input("Choose extra packages, seperated by spaces (Enter/Return to skip): ").strip()
-    packages = [p for p in choice.split() if p]
-    return packages
+    while True:
+        choice = input("Choose extra packages, separated by spaces (Enter/Return to skip): ").strip()
+        packages = [p for p in choice.split() if p]
+        invalid = [p for p in packages if not bool(PACKAGE_NAME_RE.fullmatch(p))]
+
+        if invalid:
+            print(f"Invalid package name(s): {', '.join(invalid)}")
+            print("Package names may only contain lowercase letters, digits, and @ . _ + -")
+            continue
+
+        return packages
 
 def install_sound_theme():
     theme_repo = "https://github.com/cadecomposer/modern-minimal-ui-sounds.git"
@@ -100,8 +119,7 @@ def install_sound_theme():
     run(["cp", "-r", "/tmp/modern-minimal-ui-sounds", target_path])
 
     # Install required packages inside target system
-    run([
-        "arch-chroot", MNT,
+    run_chroot([
         "pacman", "-S", "--noconfirm",
         "libcanberra", "libcanberra-pulse", "libcanberra-gtk3"
     ])
@@ -314,7 +332,7 @@ def generate_config(profile: str, username: str, password: str, root_password: s
             "sys_lang": "en_US.UTF-8"
         },
         "mirror_config": {
-            "custom_repoisitories": [],
+            "custom_repositories": [],
             "custom_servers": [],
             "mirror_regions": {},
             "optional_repositories": []
@@ -395,6 +413,7 @@ def apply_sebos(variant: str):
 
     if variant == "xfce":
         install_sound_theme()
+        run_chroot(["pacman", "-S", "breeze-icons"])
 
 def main():
     if os.geteuid() != 0:
