@@ -12,9 +12,40 @@ from passlib.hash import sha512_crypt
 
 MNT = "/mnt"
 SEBOS = "/sebos"
+SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
+
+PACKAGE_NAME_RE = re.compile(r"^[a-z0-9@._+-]+$")
 
 def run(cmd):
     subprocess.run(cmd, check=True)
+
+def load_packages_file(path):
+    packages = []
+    if not os.path.exists(path):
+        return packages
+
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.split("#", 1)[0].strip()
+            if not line:
+                continue
+            if not PACKAGE_NAME_RE.fullmatch(line):
+                raise ValueError(f"Invalid package name in {path}: {line}")
+            packages.append(line)
+    return packages
+
+def profile_name(profile: str):
+    return "xfce" if profile == "xfce4" else profile
+
+def get_packages(profile: str):
+    packages = load_packages_file(os.path.join(SCRIPT_DIR, f"{profile_name(profile)}.packages"))
+    packages.extend(load_packages_file(os.path.join(SCRIPT_DIR, f"common.packages")))
+    return packages
+
+def get_postinstall_packages(variant: str):
+    packages = load_packages_file(os.path.join(SCRIPT_DIR, f"{variant}.postinstall.packages"))
+    packages.extend(load_packages_file(os.path.join(SCRIPT_DIR, f"common.postinstall.packages")))
+    return packages
 
 def run_chroot(cmd):
     if isinstance(cmd, str):
@@ -87,8 +118,6 @@ def choose_install_type():
             "profile": "minimal",
             "variant": "minimal"
         }
-
-PACKAGE_NAME_RE = re.compile(r"^[a-z0-9@._+-]+$")
 
 def choose_extra_packages():
     while True:
@@ -184,14 +213,10 @@ def generate_config(profile: str, username: str, password: str, root_password: s
     passwordhash = sha512_crypt.hash(password)
     rootpasswordhash = sha512_crypt.hash(root_password)
 
-    # Base packages
-    packages = [
-        "neovim",
-        "fastfetch",
-        "nano"
-    ]
-    
+    # Packages
+    packages = []    
     packages.extend(extra)
+    packages.extend(get_packages(profile))
 
     # Profile-specific
     if profile == "xfce4":
@@ -199,7 +224,6 @@ def generate_config(profile: str, username: str, password: str, root_password: s
         greeter = "lightdm-gtk-greeter"
         profiletype = "Desktop"
         details = ["Xfce4"]
-       
     # Disk config
     
     # Get disk size in MiB (aligned)
@@ -408,9 +432,13 @@ def apply_sebos(variant: str):
             MNT + "/"
         ])
 
+    postinstall = get_postinstall_packages(variant)
+
+    if postinstall:
+        run_chroot(["pacman", "-S", "--noconfirm", *postinstall])
+
     if variant == "xfce":
         install_sound_theme()
-        run_chroot(["pacman", "-S", "breeze-icons"])
 
 def main():
     if os.geteuid() != 0:
