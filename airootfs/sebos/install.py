@@ -470,7 +470,16 @@ def main():
 
     generate_config(install["profile"], username, password, root_password, extrapkgs, disk)
 
-    run_archinstall(auto)
+    try:
+        run_archinstall(auto)
+    except Exception:
+        if confirm("An error occured during the install, try again?"):
+            try:
+                run_archinstall(auto)
+            except Exception:
+                print("An error occurred again. Aborting.")
+        else:
+            sys.exit(1)
 
     apply_sebos(install["variant"], username)
 
