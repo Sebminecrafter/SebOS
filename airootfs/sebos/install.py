@@ -144,6 +144,18 @@ def install_sound_theme():
     run(["mkdir", "-p", f"{MNT}/usr/share/sounds"])
     run(["cp", "-r", "/tmp/modern-minimal-ui-sounds", target_path])
 
+def install_yay(username: str):
+    yay_repo = "https://aur.archlinux.org/yay.git"
+    
+    # Clone into chroot temp directory
+    run_chroot(["git", "clone", yay_repo, "/tmp/yay"])
+    
+    # Build and install as the regular user
+    run_chroot(["bash", "-c", f"cd /tmp/yay && sudo -u {username} makepkg -si --noconfirm"])
+    
+    # Cleanup
+    run_chroot(["rm", "-rf", "/tmp/yay"])
+
 def get_user_info():
     username = input("Enter username: ").strip()
 
@@ -361,7 +373,7 @@ def generate_config(profile: str, username: str, password: str, root_password: s
             "color": True,
             "parallel_downloads": 5
         },
-        "profile_config":  {
+        "profile_config": {
             "gfx_driver": gfx,
             "greeter": greeter,
             "profile": {
@@ -426,19 +438,22 @@ def apply_sebos(variant: str, username: str):
             MNT + "/"
         ])
 
-    postinstall = get_postinstall_packages(variant)
-
     # Copy skel into the already-created user's home
     home = f"{MNT}/home/{username}"
-    if os.path.exists(home):
-        run(["rsync", "-a", f"{MNT}/etc/skel/", home + "/"])
+    skel = f"{MNT}/etc/skel/"
+    if os.path.exists(home) and os.path.exists(skel):
+        run(["rsync", "-a", skel, home + "/"])
         run_chroot(["chown", "-R", f"{username}:{username}", f"/home/{username}"])
+    
+    postinstall = get_postinstall_packages(variant)
 
     if postinstall:
         run_chroot(["pacman", "-S", "--noconfirm", *postinstall])
 
     if variant == "xfce":
         install_sound_theme()
+    
+    install_yay()
 
 def main():
     if os.geteuid() != 0:
