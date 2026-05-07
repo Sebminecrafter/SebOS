@@ -1,4 +1,7 @@
 # Profile packages installed as part archinstall
 breeze-icons
+breeze-gtk
 firefox
+libcanberra
+libcanberra-pulse
 vlc
