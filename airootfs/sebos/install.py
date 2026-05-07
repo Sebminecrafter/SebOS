@@ -146,15 +146,26 @@ def install_sound_theme():
 
 def install_yay(username: str):
     yay_repo = "https://aur.archlinux.org/yay.git"
+    temp_script = "installyay.sh"
     
+    def addtofile(text: str): run_chroot(["bash", "-c", "echo", text, ">>", temp_script])
+
+    addtofile("#!/usr/bin/env bash")
+
     # Clone into chroot temp directory
-    run_chroot(["git", "clone", yay_repo])
-    
+    addtofile(f"git clone {yay_repo}")
+
+    addtofile("cd yay")
+
     # Build and install as the regular user
-    run_chroot(["bash", "-c", f"cd yay && sudo -u {username} makepkg -si --noconfirm"])
+    addtofile("sudo -u {username} makepkg -si --noconfirm")
     
     # Cleanup
-    run_chroot(["rm", "-rf", "yay"])
+    addtofile("cd ..")
+    addtofile("rm -rf yay")
+
+    run_chroot(["bash", "-c", f"./{temp_script}"])
+    run_chroot(["rm", "-f", temp_script])
 
 def get_user_info():
     username = input("Enter username: ").strip()
