@@ -1,1 +1,3 @@
 # Profile packages installed after archinstall
+libcanberra
+libcanberra-pulse

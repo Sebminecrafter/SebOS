@@ -144,12 +144,6 @@ def install_sound_theme():
     run(["mkdir", "-p", f"{MNT}/usr/share/sounds"])
     run(["cp", "-r", "/tmp/modern-minimal-ui-sounds", target_path])
 
-    # Install required packages inside target system
-    run_chroot([
-        "pacman", "-S", "--noconfirm",
-        "libcanberra", "libcanberra-pulse", "libcanberra-gtk3"
-    ])
-
 def get_user_info():
     username = input("Enter username: ").strip()
 
