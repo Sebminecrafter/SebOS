@@ -407,7 +407,7 @@ def run_archinstall(silent: bool):
     run(["pacman-key", "--populate"])
     run(ai_args)
 
-def apply_sebos(variant: str):
+def apply_sebos(variant: str, username: str):
     common = f"{SEBOS}/common/"
     variant_path = f"{SEBOS}/{variant}/"
 
@@ -427,6 +427,12 @@ def apply_sebos(variant: str):
         ])
 
     postinstall = get_postinstall_packages(variant)
+
+    # Copy skel into the already-created user's home
+    home = f"{MNT}/home/{username}"
+    if os.path.exists(home):
+        run(["rsync", "-a", f"{MNT}/etc/skel/", home + "/"])
+        run_chroot(["chown", "-R", f"{username}:{username}", f"/home/{username}"])
 
     if postinstall:
         run_chroot(["pacman", "-S", "--noconfirm", *postinstall])
@@ -451,7 +457,7 @@ def main():
 
     run_archinstall(auto)
 
-    apply_sebos(install["variant"])
+    apply_sebos(install["variant"], username)
 
     print("Install complete.")
 
