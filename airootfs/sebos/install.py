@@ -148,13 +148,13 @@ def install_yay(username: str):
     yay_repo = "https://aur.archlinux.org/yay.git"
     
     # Clone into chroot temp directory
-    run_chroot(["git", "clone", yay_repo, "/tmp/yay"])
+    run_chroot(["git", "clone", yay_repo])
     
     # Build and install as the regular user
-    run_chroot(["bash", "-c", f"cd /tmp/yay && sudo -u {username} makepkg -si --noconfirm"])
+    run_chroot(["bash", "-c", f"cd yay && sudo -u {username} makepkg -si --noconfirm"])
     
     # Cleanup
-    run_chroot(["rm", "-rf", "/tmp/yay"])
+    run_chroot(["rm", "-rf", "yay"])
 
 def get_user_info():
     username = input("Enter username: ").strip()
