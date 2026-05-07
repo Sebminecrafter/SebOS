@@ -158,10 +158,12 @@ def install_yay(username: str):
 
 def get_user_info():
     username = input("Enter username: ").strip()
+    
+    def get_pass(p: str): return getpass.getpass(prompt=p, echo_char="*")
 
     while True:
-        password = getpass.getpass(prompt="Enter password: ", echo_char='*')
-        confirm = getpass.getpass(prompt="Confirm password: ", echo_char='*')
+        password = get_pass("Enter password: ")
+        confirm = get_pass("Confirm password: ")
         if password == confirm:
             break
         print("Passwords do not match.")
@@ -453,7 +455,7 @@ def apply_sebos(variant: str, username: str):
     if variant == "xfce":
         install_sound_theme()
     
-    install_yay()
+    install_yay(username)
 
 def main():
     if os.geteuid() != 0:
