@@ -147,24 +147,30 @@ def install_sound_theme():
 def install_yay(username: str):
     yay_repo = "https://aur.archlinux.org/yay.git"
     script_content = f"""#!/usr/bin/env bash
-git clone {yay_repo}
 cd yay
 sudo -u {username} makepkg -si --noconfirm
 cd ..
 rm -rf yay
 """
     temp_script_path = f"{MNT}/installyay.sh"
-    
+
     # Write script to chroot
     with open(temp_script_path, "w") as f:
         f.write(script_content)
     
+    # Clone git first
+    run_chroot(["git", "clone", yay_repo])
+
     # Make executable
     run_chroot(["chmod", "+x", "installyay.sh"])
-    
+
+    # Adjust perms
+    run_chroot(["chmod", "+777", "installyay.sh"])
+    run_chroot(["chmod", "-R", "+777", "/yay"])
+
     # Run script
-    run_chroot(["./installyay.sh"])
-    
+    run_chroot(["sudo", "-u", username, "/installyay.sh"])
+
     # Cleanup
     run_chroot(["rm", "-f", "installyay.sh"])
 
