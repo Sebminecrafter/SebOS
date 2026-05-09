@@ -146,33 +146,32 @@ def install_sound_theme():
 
 def install_yay(username: str):
     yay_repo = "https://aur.archlinux.org/yay.git"
+    build_dir = "/tmp/yay-build"
+    script_path = "/tmp/installyay.sh"
+
     script_content = f"""#!/usr/bin/env bash
-cd yay
-sudo -u {username} makepkg -si --noconfirm
-cd ..
-rm -rf yay
+set -e
+cd {build_dir}
+makepkg -si --noconfirm
+rm -rf {build_dir}
 """
-    temp_script_path = f"{MNT}/installyay.sh"
 
     # Write script to chroot
-    with open(temp_script_path, "w") as f:
+    with open(f"{MNT}{script_path}", "w") as f:
         f.write(script_content)
-    
-    # Clone git first
-    run_chroot(["git", "clone", yay_repo])
 
-    # Make executable
-    run_chroot(["chmod", "+x", "installyay.sh"])
+    run_chroot(["chmod", "+x", script_path])
 
-    # Adjust perms
-    run_chroot(["chmod", "+777", "installyay.sh"])
-    run_chroot(["chmod", "-R", "+777", "/yay"])
+    # Clone as the target user so git ownership matches the makepkg process.
+    # Cloning as root causes Git (>=2.35.2) to refuse VCS operations when
+    # makepkg later runs as an unprivileged user ("failed to check vcs").
+    run_chroot(["sudo", "-u", username, "git", "clone", yay_repo, build_dir])
 
-    # Run script
-    run_chroot(["sudo", "-u", username, "/installyay.sh"])
+    # Run build + install as the same user
+    run_chroot(["sudo", "-u", username, script_path])
 
     # Cleanup
-    run_chroot(["rm", "-f", "installyay.sh"])
+    run_chroot(["rm", "-f", script_path])
 
 def get_user_info():
     username = input("Enter username: ").strip()
