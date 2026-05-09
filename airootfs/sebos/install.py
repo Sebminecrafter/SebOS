@@ -34,19 +34,6 @@ def load_packages_file(path):
             packages.append(line)
     return packages
 
-def profile_name(profile: str):
-    return "xfce" if profile == "xfce4" else profile
-
-def get_packages(profile: str):
-    packages = load_packages_file(os.path.join(SCRIPT_DIR, f"{profile_name(profile)}.packages"))
-    packages.extend(load_packages_file(os.path.join(SCRIPT_DIR, f"common.packages")))
-    return packages
-
-def get_postinstall_packages(variant: str):
-    packages = load_packages_file(os.path.join(SCRIPT_DIR, f"{variant}.postinstall.packages"))
-    packages.extend(load_packages_file(os.path.join(SCRIPT_DIR, f"common.postinstall.packages")))
-    return packages
-
 def run_chroot(cmd):
     if isinstance(cmd, str):
         cmd = [cmd]
@@ -102,22 +89,6 @@ def interactive_menu(options: list, prompt: str = "Select:"):
 
 def confirm(message: str):
     return interactive_menu(["Yes", "No"], message) == 0
-
-def choose_install_type():
-    choice = interactive_menu(
-        ["Xfce4", "Terminal Only (TTY)"],
-        "Select install type:"
-    )
-    if choice == 0:
-        return {
-            "profile": "xfce4",
-            "variant": "xfce"
-        }
-    else:
-        return {
-            "profile": "minimal",
-            "variant": "minimal"
-        }
 
 def choose_extra_packages():
     while True:
@@ -213,24 +184,17 @@ def choose_disk():
     
     return full_disk
 
-def generate_config(profile: str, username: str, password: str, root_password: str, extra: list, disk: str):
-    gfx = greeter = details = None
-    profiletype = "Minimal"
-
+def generate_config(username: str, password: str, root_password: str, extra: list, disk: str):
     passwordhash = sha512_crypt.hash(password)
     rootpasswordhash = sha512_crypt.hash(root_password)
 
     # Packages
     packages = []    
     packages.extend(extra)
-    packages.extend(get_packages(profile))
-
-    # Profile-specific
-    if profile == "xfce4":
-        gfx = "All open-source"
-        greeter = "lightdm-gtk-greeter"
-        profiletype = "Desktop"
-        details = ["Xfce4"]
+    packages.extend(
+        load_packages_file(os.path.join(SCRIPT_DIR, "packages"))
+        )
+    
     # Disk config
     
     # Get disk size in MiB (aligned)
@@ -375,12 +339,12 @@ def generate_config(profile: str, username: str, password: str, root_password: s
             "parallel_downloads": 5
         },
         "profile_config": {
-            "gfx_driver": gfx,
-            "greeter": greeter,
+            "gfx_driver": "All open-source",
+            "greeter": "lightdm-gtk-greeter",
             "profile": {
                 "custom_settings": {},
-                "details": details,
-                "main": profiletype
+                "details": ["Xfce4"],
+                "main": "Desktop"
             }
         },
         "script": None,
@@ -420,24 +384,14 @@ def run_archinstall(silent: bool):
     run(["pacman-key", "--populate"])
     run(ai_args)
 
-def apply_sebos(variant: str, username: str):
-    common = f"{SEBOS}/common/"
-    variant_path = f"{SEBOS}/{variant}/"
-
+def apply_sebos(username: str):
+    # Copy overrides (SebOS theming)
     run([
         "rsync",
         "-a",
-        common,
+        f"{SEBOS}/override/",
         MNT + "/"
     ])
-
-    if os.path.exists(variant_path):
-        run([
-            "rsync",
-            "-a",
-            variant_path,
-            MNT + "/"
-        ])
 
     # Copy skel into the already-created user's home
     home = f"{MNT}/home/{username}"
@@ -446,22 +400,19 @@ def apply_sebos(variant: str, username: str):
         run(["rsync", "-a", skel, home + "/"])
         run_chroot(["chown", "-R", f"{username}:{username}", f"/home/{username}"])
     
-    postinstall = get_postinstall_packages(variant)
+    postinstall = load_packages_file(os.path.join(SCRIPT_DIR, "postinstall_packages"))
 
     if postinstall:
         run_chroot(["pacman", "-S", "--noconfirm", *postinstall])
 
-    if variant == "xfce":
-        install_sound_theme()
-    
+    install_sound_theme()
     install_yay(username)
 
 def main():
     if os.geteuid() != 0:
         print("Please run this program as root. (Have you tried using sudo?)")
         sys.exit(1)
-
-    install = choose_install_type()
+    
     username, password = get_user_info()
     root_password = get_root_password()
     extrapkgs = choose_extra_packages()
@@ -469,7 +420,7 @@ def main():
 
     auto = confirm("Proceed with automatic installation? ")
 
-    generate_config(install["profile"], username, password, root_password, extrapkgs, disk)
+    generate_config(username, password, root_password, extrapkgs, disk)
 
     try:
         run_archinstall(auto)
@@ -482,7 +433,7 @@ def main():
         else:
             sys.exit(1)
 
-    apply_sebos(install["variant"], username)
+    apply_sebos(username)
 
     print("Install complete.")
 

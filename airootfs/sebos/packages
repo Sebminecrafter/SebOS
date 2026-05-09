@@ -1,4 +1,7 @@
-# Profile packages installed as part archinstall
+# Packages installed as part of archinstall
+fastfetch
+less
+neovim
 breeze-icons
 breeze-gtk
 firefox
