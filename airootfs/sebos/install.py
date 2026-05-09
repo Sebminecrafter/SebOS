@@ -16,6 +16,8 @@ SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 
 PACKAGE_NAME_RE = re.compile(r"^[a-z0-9@._+-]+$")
 
+SUDOERS_NOPASSWD_FILE = "/etc/sudoers.d/installer-nopasswd"
+
 def run(cmd):
     subprocess.run(cmd, check=True)
 
@@ -86,6 +88,16 @@ def interactive_menu(options: list, prompt: str = "Select:"):
 
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+
+def enable_passwordless_sudo(username: str):
+    # Add a temporary NOPASSWD sudoers rule for the install.
+    rule = f"{username} ALL=(ALL) NOPASSWD: ALL\n"
+    run_chroot(["bash", "-c", f"echo '{rule}' > {SUDOERS_NOPASSWD_FILE}"])
+    run_chroot(["chmod", "440", SUDOERS_NOPASSWD_FILE])
+
+def disable_passwordless_sudo():
+    # Remove the temporary NOPASSWD sudoers rule.
+    run_chroot(["rm", "-f", SUDOERS_NOPASSWD_FILE])
 
 def confirm(message: str):
     return interactive_menu(["Yes", "No"], message) == 0
@@ -379,30 +391,6 @@ def run_archinstall(silent: bool):
     run(["pacman-key", "--populate"])
     run(ai_args)
 
-def apply_sebos(username: str):
-    # Copy overrides (SebOS theming)
-    run([
-        "rsync",
-        "-a",
-        f"{SEBOS}/override/",
-        MNT + "/"
-    ])
-
-    # Copy skel into the already-created user's home
-    home = f"{MNT}/home/{username}"
-    skel = f"{MNT}/etc/skel/"
-    if os.path.exists(home) and os.path.exists(skel):
-        run(["rsync", "-a", skel, home + "/"])
-        run_chroot(["chown", "-R", f"{username}:{username}", f"/home/{username}"])
-    
-    postinstall = load_packages_file(os.path.join(SCRIPT_DIR, "postinstall_packages"))
-
-    if postinstall:
-        run_chroot(["pacman", "-S", "--noconfirm", *postinstall])
-
-    install_sound_theme()
-    install_yay(username)
-
 def main():
     if os.geteuid() != 0:
         print("Please run this program as root. (Have you tried using sudo?)")
@@ -435,7 +423,32 @@ def main():
         else:
             sys.exit(1)
 
-    apply_sebos(username)
+    enable_passwordless_sudo(username)
+
+    # Copy overrides (SebOS theming)
+    run([
+        "rsync",
+        "-a",
+        f"{SEBOS}/override/",
+        MNT + "/"
+    ])
+
+    # Copy skel into the already-created user's home
+    home = f"{MNT}/home/{username}"
+    skel = f"{MNT}/etc/skel/"
+    if os.path.exists(home) and os.path.exists(skel):
+        run(["rsync", "-a", skel, home + "/"])
+        run_chroot(["chown", "-R", f"{username}:{username}", f"/home/{username}"])
+    
+    postinstall = load_packages_file(os.path.join(SCRIPT_DIR, "postinstall_packages"))
+
+    if postinstall:
+        run_chroot(["pacman", "-S", "--noconfirm", *postinstall])
+
+    install_sound_theme()
+    install_yay(username)
+
+    disable_passwordless_sudo()
 
     print("Install complete.")
 
