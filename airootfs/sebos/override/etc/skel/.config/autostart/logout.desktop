@@ -1,0 +1,12 @@
+[Desktop Entry]
+Encoding=UTF-8
+Version=0.9.4
+Type=Application
+Name=Logout
+Comment=Play a sound on logout
+Exec=canberra-gtk-play -f /usr/share/sounds/modern-minimal-ui-sounds/stereo/desktop-logout.oga
+OnlyShowIn=XFCE;
+RunHook=1
+StartupNotify=false
+Terminal=false
+Hidden=false
