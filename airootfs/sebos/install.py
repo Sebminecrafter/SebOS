@@ -151,8 +151,8 @@ def get_root_password():
     print("""The root account is an administrator, which is used for high privelege tasks or in emergencies.
 This password should be secure and not given to anyone. Don't forget it!""")
     while True:
-        password = get_pass(prompt="Enter a root password: ")
-        confirm = get_pass(prompt="Confirm root password: ")
+        password = get_pass("Enter a root password: ")
+        confirm = get_pass("Confirm root password: ")
         if password == confirm:
             return password
         print("Passwords do not match.")
