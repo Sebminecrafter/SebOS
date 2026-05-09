@@ -126,26 +126,21 @@ def install_yay(username: str):
     ])
     run_chroot(["rm", "-rf", build_dir])
 
+def get_pass(p: str): return getpass.getpass(prompt=p, echo_char="*")
 def get_user_info():
-    username = input("Enter username: ").strip()
-    
-    def get_pass(p: str): return getpass.getpass(prompt=p, echo_char="*")
-
+    username = input("Choose your username: ").strip()
     while True:
-        password = get_pass("Enter password: ")
+        password = get_pass("Enter a password: ")
         confirm = get_pass("Confirm password: ")
         if password == confirm:
-            break
+            return username, password
         print("Passwords do not match.")
-
-    return username, password
-
 def get_root_password():
-    print("The root account is an administrator, which is used for high privelege tasks or in emergencies.")
-    print("This password should be secure and not given to anyone. Don't forget it!")
+    print("""The root account is an administrator, which is used for high privelege tasks or in emergencies.
+This password should be secure and not given to anyone. Don't forget it!""")
     while True:
-        password = getpass.getpass(prompt="Enter root password: ", echo_char='*')
-        confirm = getpass.getpass(prompt="Confirm root password: ", echo_char='*')
+        password = get_pass(prompt="Enter a root password: ")
+        confirm = get_pass(prompt="Confirm root password: ")
         if password == confirm:
             return password
         print("Passwords do not match.")
@@ -172,13 +167,13 @@ def choose_disk():
         labels.append(f"{name} ({size})")
 
     if not disks:
-        print("No disks found. (Something is definitely wrong here)")
+        print("No disks found, the installer cannot continue.")
         sys.exit(1)
 
     idx = interactive_menu(labels, "Select disk (←/→, Enter):")
     full_disk = disks[idx]
 
-    if not confirm(f"WARNING: This will erase ALL data on {full_disk}. Continue? "):
+    if not confirm(f"WARNING: This will ERASE ALL DATA on {full_disk}. Continue? "):
         print("Aborted.")
         sys.exit(1)
     
@@ -413,6 +408,13 @@ def main():
         print("Please run this program as root. (Have you tried using sudo?)")
         sys.exit(1)
     
+    print("""
+##################################
+# SebOS - An amazing Arch distro #
+#               SebOS Installer  #
+##################################
+""")
+
     username, password = get_user_info()
     root_password = get_root_password()
     extrapkgs = choose_extra_packages()
