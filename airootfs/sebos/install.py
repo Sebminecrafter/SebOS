@@ -146,32 +146,14 @@ def install_sound_theme():
 
 def install_yay(username: str):
     yay_repo = "https://aur.archlinux.org/yay.git"
-    build_dir = "/tmp/yay-build"
-    script_path = "/tmp/installyay.sh"
+    build_dir = f"/home/{username}/yay-build"
 
-    script_content = f"""#!/usr/bin/env bash
-set -e
-cd {build_dir}
-makepkg -si --noconfirm
-rm -rf {build_dir}
-"""
-
-    # Write script to chroot
-    with open(f"{MNT}{script_path}", "w") as f:
-        f.write(script_content)
-
-    run_chroot(["chmod", "+x", script_path])
-
-    # Clone as the target user so git ownership matches the makepkg process.
-    # Cloning as root causes Git (>=2.35.2) to refuse VCS operations when
-    # makepkg later runs as an unprivileged user ("failed to check vcs").
     run_chroot(["sudo", "-u", username, "git", "clone", yay_repo, build_dir])
-
-    # Run build + install as the same user
-    run_chroot(["sudo", "-u", username, script_path])
-
-    # Cleanup
-    run_chroot(["rm", "-f", script_path])
+    run_chroot([
+        "sudo", "-u", username,
+        "bash", "-c", f"cd {build_dir} && makepkg -si --noconfirm"
+    ])
+    run_chroot(["rm", "-rf", build_dir])
 
 def get_user_info():
     username = input("Enter username: ").strip()
