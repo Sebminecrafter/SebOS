@@ -10,7 +10,7 @@ on:
       release_name:
         description: "Release Name"
         required: true
-        default: "archlinux-$(date +%Y.%m.%d)"
+        default: "$(date +%Y.%m.%d)"
 
 jobs:
   build-iso:
@@ -36,19 +36,15 @@ jobs:
           pacman -Syu --noconfirm
           pacman -S --noconfirm archiso git squashfs-tools
 
-      - name: Prepare working directory
-        run: |
-          mkdir -p work out
-
       - name: Build ISO
         run: |
-          mkarchiso -v -w work -o out .
+          mkarchiso -vrw ./work -o . .
 
       - name: Upload ISO artifact
         uses: actions/upload-artifact@v4
         with:
-          name: arch-linux-iso
-          path: out/*.iso
+          name: SebOS-${{ github.event.inputs.release_name }}
+          path: *.iso
 
       - name: Create GitHub Release
         if: github.event_name == 'workflow_dispatch'
