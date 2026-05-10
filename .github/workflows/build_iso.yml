@@ -1,0 +1,60 @@
+name: Build Arch ISO
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      release_name:
+        description: "Release Name"
+        required: true
+        default: "archlinux-$(date +%Y.%m.%d)"
+
+jobs:
+  build-iso:
+    runs-on: ubuntu-latest
+
+    container:
+      image: archlinux:latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize pacman keyring
+        run: |
+          pacman-key --init
+          pacman-key --populate archlinux
+
+      - name: Update system and install archiso
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm archiso git squashfs-tools
+
+      - name: Prepare working directory
+        run: |
+          mkdir -p work out
+
+      - name: Build ISO
+        run: |
+          mkarchiso -v -w work -o out .
+
+      - name: Upload ISO artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: arch-linux-iso
+          path: out/*.iso
+
+      - name: Create GitHub Release
+        if: github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.release_name }}
+          name: ${{ github.event.inputs.release_name }}
+          files: out/*.iso
+          generate_release_notes: true
