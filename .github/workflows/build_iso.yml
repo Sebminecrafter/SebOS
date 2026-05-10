@@ -43,7 +43,7 @@ jobs:
       - name: Upload ISO artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SebOS-${{ github.event.inputs.release_name }}
+          name: SebOS ISO
           path: *.iso
 
       - name: Create GitHub Release
